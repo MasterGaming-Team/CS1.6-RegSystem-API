@@ -50,7 +50,7 @@ public plugin_init()
 }
 
 public plugin_natives()
-{
+{	
 	gSqlRegTuple = SQL_MakeDbTuple("127.0.0.1","ebateam_forum", "z8hEn1gEUTWaSzfY","ebateam_forum")
 	
 	register_native("mg_reg_user_loading", "native_reg_user_loading")
@@ -98,13 +98,15 @@ public sqlRegisterHandle(FailState, Handle:Query, error[], errorcode, data[], da
 	len += formatex(sqlText[len], charsmax(sqlText) - len, "VALUE ")
 	len += formatex(sqlText[len], charsmax(sqlText) - len, "(^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^");",
 				data[dt_username], data[dt_password], data[dt_email], lName, lSteamId, lSetinfoPwHash, lName, lSteamId, lRegDate)
-	SQL_ThreadQuery(userdb(), "sqlRegisterInsertHandle", sqlText)
+	SQL_ThreadQuery(gSqlRegTuple, "sqlRegisterInsertHandle", sqlText)
 }
 
 public sqlRegisterInsertHandle(FailState, Handle:Query, error[], errorcode, data[], datasize, Float:fQueueTime)
 {
-	new retValue
+	new id, retValue
 	
+	id = data[0]
+
 	if(FailState == TQUERY_CONNECT_FAILED || FailState == TQUERY_QUERY_FAILED)
 	{
 		log_amx("%s", error)
@@ -184,8 +186,6 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 		
 		while(SQL_MoreResults(Query) && !lAutoLogin)
 		{
-			new lNameSql[MAX_NAME_LENGTH+1], lSetinfoPwSql[MAX_SETINFOPW_LENGTH+1]
-			
 			if(SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "settingAutoLoginSteamId")))
 			{
 				new lSteamIdSql[MAX_AUTHID_LENGTH+1], lSteamId[MAX_AUTHID_LENGTH+1]
@@ -227,7 +227,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 				SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "lastSetinfoPwHash"), lSetinfoPwSql, charsmax(lSetinfoPwSql))
 				getSetinfoPwHash(id, lSetinfoPw, charsmax(lSetinfoPw))
 				
-				if(!equal(lSetinfoPwSql, SetinfoPw))
+				if(!equal(lSetinfoPwSql, lSetinfoPw))
 				{
 					lAutoLogin = false
 					SQL_NextRow(Query)
@@ -273,10 +273,12 @@ public sqlGeneralHandle(FailState, Handle:Query, error[],errcode, data[], datasi
 
 public checkSqlArray(taskId)
 {
-	new id = taskId - TASKID
+	new id = taskId - TASKID2
 	
-	if(!ArraySize(arrayUserLoadingSql[id]))
+	if(arrayUserLoadingSql[id] && !ArraySize(arrayUserLoadingSql[id]))
 	{
+		new retValue
+
 		ArrayDestroy(arrayUserLoadingSql[id])
 		ExecuteForward(gForwardClientSuccessLogin, retValue, id)
 	}
@@ -301,11 +303,11 @@ public saveAccountData(taskId)
 	static sqlText[2048]
 	static len
 	static retValue
-	
+
+	static lSteamId[MAX_AUTHID_LENGTH+1], lName[MAX_NAME_LENGTH+1], lSetinfoPwHash[MAX_SETINFOPW_LENGTH+1]
+
 	if(loggingOut)
 	{
-		static lSteamId[MAX_AUTHID_LENGTH+1], lName[MAX_NAME_LENGTH+1], lSetinfoPwHash[MAX_SETINFOPW_LENGTH+1]
-		
 		lSteamId[0] = EOS
 		lName[0] = EOS
 		lSetinfoPwHash[0] = EOS
@@ -325,8 +327,8 @@ public saveAccountData(taskId)
 	if(loggingOut)
 		len += formatex(sqlText[len], charsmax(sqlText) - len, ", lastSteamId = ^"%s^", lastName = ^"%s^", lastSetinfoPwHash = ^"%s^"", lSteamId, lName, lSetinfoPwHash)
 	
-	len += formatex(sqlText[len], charsmax(sqlText) - len, " WHERE gameId=^"%d^";", gGameId[id])
-	SQL_ThreadQuery(zm2(), "sqlGeneralHandle", sqlText)
+	len += formatex(sqlText[len], charsmax(sqlText) - len, " WHERE gameId=^"%d^";", gAccountId[id])
+	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
 	
 	if(loggingOut)
 		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_LOGOUT)
@@ -337,7 +339,9 @@ public saveAccountData(taskId)
 }
 
 public native_reg_user_loading(plugin_id, param_num)
+{
 	return flag_get(gLoadingUser, get_param(1))
+}
 
 public native_reg_user_loggedin(plugin_id, param_num)
 {
@@ -469,6 +473,8 @@ public native_reg_user_sqlload_start(plugin_id, param_num)
 		arrayUserLoadingSql[id] = ArrayCreate(1)
 	
 	ArrayPushCell(arrayUserLoadingSql[id], lSqlId)
+
+	return true
 }
 
 public native_reg_user_sqlload_finished(plugin_id, param_num)
@@ -484,8 +490,10 @@ public native_reg_user_sqlload_finished(plugin_id, param_num)
 	
 	ArrayDeleteItem(arrayUserLoadingSql[id], lSqlId)
 	
-	remove_task(TASKID+id)
-	set_task(0.5, "checkSqlArray", TASKID+id)
+	remove_task(TASKID2+id)
+	set_task(0.5, "checkSqlArray", TASKID2+id)
+
+	return true
 }
 
 public client_putinserver(id)
@@ -496,7 +504,9 @@ public client_putinserver(id)
 }
 
 public client_disconnected(id)
+{
 	client_clean(id, true)
+}
 
 client_clean(id, bool:disconnect = false)
 {
@@ -512,6 +522,8 @@ client_clean(id, bool:disconnect = false)
 	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveZP=^"%d^" WHERE accountId=^"%d^";", false, gAccountId[id])
 	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
 	
+	ArrayDestroy(arrayUserLoadingSql[id])
+
 	flag_unset(gLoadingUser, id)
 	flag_unset(gLoggedIn, id)
 	flag_unset(gAutoLogin, id)
@@ -543,7 +555,7 @@ userRegister(id, const username[], const password[], eMail[])
 	return true
 }
 
-userLogin(id, const &username[], const &password[])
+userLogin(id, const username[]="", const password[]="")
 {
 	if(!is_user_connected(id) || flag_get(gLoggedIn, id) || flag_get(gLoadingUser, id))
 		return false
@@ -564,11 +576,37 @@ userLogin(id, const &username[], const &password[])
 		get_user_name(id, lName, charsmax(lName))
 		getSetinfoPwHash(id, lSetinfoPwHash, charsmax(lSetinfoPwHash))
 		
-		formatex(lSqlTxt, charsmax(lSqlTxt), "SELECT * FROM regSystemAccounts WHERE lastSteamId=^"%s^" OR lastName=^"%s^" OR (lastSetinfoPw=^"%s^" AND lastSetinfoPw!="");", lSteamId, lName, lSetinfoPwHash)
+		formatex(lSqlTxt, charsmax(lSqlTxt), "SELECT * FROM regSystemAccounts WHERE lastSteamId=^"%s^" OR lastName=^"%s^" OR (lastSetinfoPw=^"%s^" AND lastSetinfoPw!=^"^");", lSteamId, lName, lSetinfoPwHash)
 	}
 	SQL_ThreadQuery(gSqlRegTuple, "sqlLoginHandle", lSqlTxt, data, 1)
 	
 	return true
+}
+
+userLogout(id)
+{
+	flag_set(gLoadingUser, id)
+
+	remove_task(TASKID1+id)
+	saveAccountData(TASKID1+(id*33)) // *33, so the save forward will send the save all message
+	
+	new sqlText[128], retValue
+	
+	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveZP=^"%d^" WHERE accountId=^"%d^";", false, gAccountId[id])
+	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
+	
+	remove_task(TASKID2+id)
+
+	ArrayDestroy(arrayUserLoadingSql[id])
+
+	flag_unset(gLoadingUser, id)
+	flag_unset(gLoggedIn, id)
+	flag_unset(gAutoLogin, id)
+	gAccountId[id] = 0
+	gGameTime[id] = 0
+	
+	ExecuteForward(gForwardClientClean, retValue, id)
+	flag_unset(gLoadingUser, id)
 }
 
 getSetinfoPwHash(id, string[], len)

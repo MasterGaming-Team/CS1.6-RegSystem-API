@@ -24,16 +24,29 @@ new Array:arrayUserLoadingSql[33]
 
 new Handle:gSqlRegTuple
 
-new gForwardClientSuccessLogin, gForwardClientProcessLogin, gForwardClientFailedLogin, gForwardClientClean
+new gForwardClientSuccessRegister, gForwardClientFailedRegister
+new gForwardClientSuccessLogin, gForwardClientProcessLogin, gForwardClientFailedLogin
+new gForwardClientClean, gForwardClientSqlSave
+
+enum _:dataTypes
+{
+	dt_id,
+	dt_username[MAX_USERNAME_LENGTH+1],
+	dt_password[MAX_PASSWORD_LENGTH+1],
+	dt_email[MAX_EMAIL_LENGTH+1]
+}
 
 public plugin_init()
 {
 	register_plugin(PLUGIN, VERSION, AUTHOR)
 
+	gForwardClientSuccessRegister = CreateMultiForward("mg_fw_client_register_success", ET_CONTINUE, FP_CELL)
+	gForwardClientFailedRegister = CreateMultiForward("mg_fw_client_register_failed", ET_CONTINUE, FP_CELL, FP_CELL)
 	gForwardClientSuccessLogin = CreateMultiForward("mg_fw_client_login_success", ET_CONTINUE, FP_CELL)
 	gForwardClientProcessLogin = CreateMultiForward("mg_fw_client_login_process", ET_CONTINUE, FP_CELL)
 	gForwardClientFailedLogin = CreateMultiForward("mg_fw_client_login_failed", ET_CONTINUE, FP_CELL, FP_CELL)
 	gForwardClientClean = CreateMultiForward("mg_fw_client_clean", ET_CONTINUE, FP_CELL)
+	gForwardClientSqlSave = CreateMultiForward("mg_fw_client_sql_save", ET_CONTINUE, FP_CELL, FP_CELL)
 }
 
 public plugin_natives()
@@ -42,10 +55,65 @@ public plugin_natives()
 	
 	register_native("mg_reg_user_loading", "native_reg_user_loading")
 	register_native("mg_reg_user_loggedin", "native_reg_user_loggedin")
+	register_native("mg_reg_user_register", "native_reg_user_register")
 	register_native("mg_reg_user_login", "native_reg_user_login")
 	register_native("mg_reg_user_logout", "native_reg_user_logout")
 	register_native("mg_reg_user_sqlload_start", "native_reg_user_sqlload_start")
 	register_native("mg_reg_user_sqlload_finished", "native_reg_user_sqlload_finished")
+}
+
+public sqlRegisterHandle(FailState, Handle:Query, error[], errorcode, data[], datasize, Float:fQueueTime)
+{
+	new id = data[dt_id]
+	
+	if(FailState == TQUERY_CONNECT_FAILED || FailState == TQUERY_QUERY_FAILED)
+	{
+		new retValue
+		
+		log_amx("%s", error)
+		flag_unset(gLoadingUser, id)
+		ExecuteForward(gForwardClientFailedRegister, retValue, id, ERROR_SQL_ERROR)
+		return
+	}
+	
+	if(SQL_NumRows(Query) > 0)
+	{
+		new retValue
+		
+		flag_unset(gLoadingUser, id)
+		ExecuteForward(gForwardClientFailedRegister, retValue, id, ERROR_ACCOUNT_USED)
+		return
+	}
+	
+	new sqlText[500], len
+	new lSteamId[MAX_AUTHID_LENGTH+1], lName[MAX_NAME_LENGTH+1], lSetinfoPwHash[MAX_SETINFOPW_LENGTH+1], lRegDate[30]
+	
+	get_user_authid(id, lSteamId, charsmax(lSteamId))
+	get_user_name(id, lName, charsmax(lName))
+	getSetinfoPwHash(id, lSetinfoPwHash, charsmax(lSetinfoPwHash))
+	get_time("%Y.%m.%d. - %H:%M:%S", lRegDate, charsmax(lRegDate))
+	
+	len += formatex(sqlText[len], charsmax(sqlText) - len, "INSERT INTO regSystemAccounts ")
+	len += formatex(sqlText[len], charsmax(sqlText) - len, "(userName, passWord, eMail, lastName, lastSteamId, lastSetinfoPwHash, regName, regSteamId, regDate) ")
+	len += formatex(sqlText[len], charsmax(sqlText) - len, "VALUE ")
+	len += formatex(sqlText[len], charsmax(sqlText) - len, "(^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^");",
+				data[dt_username], data[dt_password], data[dt_email], lName, lSteamId, lSetinfoPwHash, lName, lSteamId, lRegDate)
+	SQL_ThreadQuery(userdb(), "sqlRegisterInsertHandle", sqlText)
+}
+
+public sqlRegisterInsertHandle(FailState, Handle:Query, error[], errorcode, data[], datasize, Float:fQueueTime)
+{
+	new retValue
+	
+	if(FailState == TQUERY_CONNECT_FAILED || FailState == TQUERY_QUERY_FAILED)
+	{
+		log_amx("%s", error)
+		flag_unset(gLoadingUser, id)
+		ExecuteForward(gForwardClientFailedRegister, retValue, id, ERROR_SQL_ERROR)
+		return
+	}
+	
+	ExecuteForward(gForwardClientSuccessRegister, retValue, id)
 }
 
 public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datasize, Float:fQueueTime)
@@ -86,7 +154,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 	}
 	
 	new activeAccount = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "accountActiveZP"))
-		
+	
 	if(activeAccount)
 	{
 		if(flag_get(gAutoLogin, id))
@@ -194,53 +262,6 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 		ExecuteForward(gForwardClientSuccessLogin, retValue, id)
 }
 
-public saveAccountData(taskId)
-{
-	static id, disconnect
-	id = taskId - TASKID1
-	
-	disconnect = false
-	
-	if(id > 32)
-	{
-		disconnect = true
-		id /= 33
-	}
-	
-	if(!flag_get(gLoggedIn, id) || flag_get(gLoadingUser, id) || !gAccountId[id])
-		return
-	
-	static sqlText[2048]
-	static len
-	
-	if(disconnect)
-	{
-		static lSteamId[MAX_AUTHID_LENGTH+1], lName[MAX_NAME_LENGTH+1], lSetinfoPwHash[MAX_SETINFOPW_LENGTH+1]
-		
-		lSteamId[0] = EOS
-		lName[0] = EOS
-		lSetinfoPwHash[0] = EOS
-		
-		get_user_authid(id, lSteamId, charsmax(lSteamId))
-		get_user_name(id, lName, charsmax(lName))
-		getSetinfoPwHash(id, lSetinfoPwHash, charsmax(lSetinfoPwHash))
-	}
-	
-	sqlText[0] = EOS
-	len = 0
-	
-	len += formatex(sqlText[len], charsmax(sqlText) - len, "UPDATE regSystemAccounts SET")
-	len += formatex(sqlText[len], charsmax(sqlText) - len, " gameTime = ^"%d^"", gGameTime[id]+get_user_time(id, 1))
-	
-	if(disconnect)
-		len += formatex(sqlText[len], charsmax(sqlText) - len, ", lastSteamId = ^"%s^", lastName = ^"%s^", lastSetinfoPwHash = ^"%s^"", lSteamId, lName, lSetinfoPwHash)
-	
-	len += formatex(sqlText[len], charsmax(sqlText) - len, " WHERE gameId=^"%d^";", gGameId[id])
-	SQL_ThreadQuery(zm2(), "sqlGeneralHandle", sqlText)
-	
-	set_task(10.0, "sqlSaveData", TASKID1+id)
-}
-
 public sqlGeneralHandle(FailState, Handle:Query, error[],errcode, data[], datasize)
 {
 	if(FailState == TQUERY_CONNECT_FAILED || FailState == TQUERY_QUERY_FAILED)
@@ -261,6 +282,60 @@ public checkSqlArray(taskId)
 	}
 }
 
+public saveAccountData(taskId)
+{
+	static id, loggingOut
+	id = taskId - TASKID1
+	
+	loggingOut = false
+	
+	if(id > 32)
+	{
+		loggingOut = true
+		id /= 33
+	}
+	
+	if(!flag_get(gLoggedIn, id) || flag_get(gLoadingUser, id) || !gAccountId[id])
+		return
+	
+	static sqlText[2048]
+	static len
+	static retValue
+	
+	if(loggingOut)
+	{
+		static lSteamId[MAX_AUTHID_LENGTH+1], lName[MAX_NAME_LENGTH+1], lSetinfoPwHash[MAX_SETINFOPW_LENGTH+1]
+		
+		lSteamId[0] = EOS
+		lName[0] = EOS
+		lSetinfoPwHash[0] = EOS
+		
+		get_user_authid(id, lSteamId, charsmax(lSteamId))
+		get_user_name(id, lName, charsmax(lName))
+		getSetinfoPwHash(id, lSetinfoPwHash, charsmax(lSetinfoPwHash))
+	}
+	
+	sqlText[0] = EOS
+	len = 0
+	retValue = 0
+	
+	len += formatex(sqlText[len], charsmax(sqlText) - len, "UPDATE regSystemAccounts SET")
+	len += formatex(sqlText[len], charsmax(sqlText) - len, " gameTime = ^"%d^"", gGameTime[id]+get_user_time(id, 1))
+	
+	if(loggingOut)
+		len += formatex(sqlText[len], charsmax(sqlText) - len, ", lastSteamId = ^"%s^", lastName = ^"%s^", lastSetinfoPwHash = ^"%s^"", lSteamId, lName, lSetinfoPwHash)
+	
+	len += formatex(sqlText[len], charsmax(sqlText) - len, " WHERE gameId=^"%d^";", gGameId[id])
+	SQL_ThreadQuery(zm2(), "sqlGeneralHandle", sqlText)
+	
+	if(loggingOut)
+		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_LOGOUT)
+	else
+		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_REGULAR)
+	
+	set_task(30.0, "sqlSaveData", TASKID1+id)
+}
+
 public native_reg_user_loading(plugin_id, param_num)
 	return flag_get(gLoadingUser, get_param(1))
 
@@ -268,10 +343,49 @@ public native_reg_user_loggedin(plugin_id, param_num)
 {
 	new id = get_param(1)
 	
+	if(!is_user_connected(id))
+	{
+		log_amx("[LOGGEDIN] User's not connected! (%d)", id)
+		return false
+	}
+	
 	if(flag_get(gLoadingUser, id))
 		return false
 	
 	return flag_get(gLoggedIn, id)
+}
+
+public native_reg_user_register(plugin_id, param_num)
+{
+	new id = get_param(1)
+	new lUsername[33], lPassword[33], lEMail[MAX_EMAIL_LENGTH+1]
+	get_string(2, lUsername, charsmax(lUsername))
+	get_string(3, lPassword, charsmax(lPassword))
+	get_string(4, lEMail, charsmax(lEMail))
+	
+	if(!is_user_connected(id))
+	{
+		log_amx("[REGISTER] User's not connected! (%d)", id)
+		return false
+	}
+	
+	if(flag_get(gLoggedIn, id))
+	{
+		log_amx("[REGISTER] User's already logged in! (%d)", gAccountId[id])
+		return false
+	}
+	
+	if(flag_get(gLoadingUser, id))
+	{
+		new lName[MAX_NAME_LENGTH+1]
+		
+		get_user_name(id, lName, charsmax(lName))
+		
+		log_amx("[REGISTER] User's account is loading! (%d)", lName)
+		return false
+	}
+	
+	return userRegister(id, lUsername, lPassword, lEMail)
 }
 
 public native_reg_user_login(plugin_id, param_num)
@@ -280,6 +394,12 @@ public native_reg_user_login(plugin_id, param_num)
 	new lUsername[33], lPassword[33]
 	get_string(2, lUsername, charsmax(lUsername))
 	get_string(3, lPassword, charsmax(lPassword))
+	
+	if(!is_user_connected(id))
+	{
+		log_amx("[LOGIN] User's not connected! (%d)", id)
+		return false
+	}
 	
 	if(flag_get(gLoggedIn, id))
 	{
@@ -303,6 +423,12 @@ public native_reg_user_login(plugin_id, param_num)
 public native_reg_user_logout(plugin_id, param_num)
 {
 	new id = get_param(1)
+	
+	if(!is_user_connected(id))
+	{
+		log_amx("[LOGOUT] User's not connected! (%d)", id)
+		return false
+	}
 	
 	if(!flag_get(gLoggedIn, id))
 	{
@@ -333,6 +459,12 @@ public native_reg_user_sqlload_start(plugin_id, param_num)
 	new id = get_param(1)
 	new lSqlId = get_param(2)
 	
+	if(!is_user_connected(id))
+	{
+		log_amx("[LOGIN] User's not connected! (%d)", id)
+		return false
+	}
+	
 	if(!arrayUserLoadingSql[id])
 		arrayUserLoadingSql[id] = ArrayCreate(1)
 	
@@ -343,6 +475,12 @@ public native_reg_user_sqlload_finished(plugin_id, param_num)
 {
 	new id = get_param(1)
 	new lSqlId = get_param(2)
+	
+	if(!is_user_connected(id))
+	{
+		log_amx("[LOGIN] User's not connected! (%d)", id)
+		return false
+	}
 	
 	ArrayDeleteItem(arrayUserLoadingSql[id], lSqlId)
 	
@@ -383,6 +521,26 @@ client_clean(id, bool:disconnect = false)
 	remove_task(TASKID1+id)
 	
 	ExecuteForward(gForwardClientClean, retValue, id)
+}
+
+userRegister(id, const username[], const password[], eMail[])
+{
+	if(!is_user_connected(id) || flag_get(gLoggedIn, id) || flag_get(gLoadingUser, id))
+		return false
+	
+	flag_set(gLoadingUser, id)
+
+	new lSqlTxt[250], data[dataTypes]
+	
+	data[dt_id] = id
+	copy(data[dt_username], charsmax(data[dt_username]), username)
+	copy(data[dt_password], charsmax(data[dt_password]), password)
+	copy(data[dt_email], charsmax(data[dt_email]), eMail)
+	
+	formatex(lSqlTxt, charsmax(lSqlTxt), "SELECT * FROM regSystemAccounts WHERE userName=^"%s^";", username)
+	SQL_ThreadQuery(gSqlRegTuple, "sqlRegisterHandle", lSqlTxt, data, sizeof(data))
+	
+	return true
 }
 
 userLogin(id, const &username[], const &password[])

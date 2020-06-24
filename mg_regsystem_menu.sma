@@ -1,29 +1,323 @@
 #include <amxmodx>
 #include <amxmisc>
+#include <mg_core>
 #include <mg_regsystem_api>
 
 #define PLUGIN "[MG] Regsystem Menu"
 #define VERSION "1.0"
 #define AUTHOR "Vieni"
 
+#define flag_get(%1,%2) %1 & ((1 << (%2 & 31)))
+#define flag_set(%1,%2) %1 |= (1 << (%2 & 31))
+#define flag_unset(%1,%2) %1 &= ~(1 << (%2 & 31))
+
+const KEYSMENU = MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4|MENU_KEY_5|MENU_KEY_6|MENU_KEY_7|MENU_KEY_8|MENU_KEY_9|MENU_KEY_0
+
+new gUsername[33][MAX_USERNAME_LENGTH+1], gPassword[33][MAX_PASSWORD_LENGTH+1], gPasswordCheck[33][MAX_PASSWORD_LENGTH+1], gEMail[33][MAX_EMAIL_LENGTH+1]
+
 public plugin_init()
 {
     register_plugin(PLUGIN, VERSION, AUTHOR)
+
+	mg_core_command_reg("reg", "cmdReg")
+	mg_core_command_reg("login", "cmdReg")
+	mg_core_command_reg("register", "cmdReg")
 
 	register_clcmd("USERNAME_L", "msgLoginUsername")
 	register_clcmd("PASSWORD_L", "msgLoginPassword")
 	register_clcmd("USERNAME_R", "msgRegUsername")
 	register_clcmd("PASSWORD1_R", "msgRegPassword")
 	register_clcmd("PASSWORD2_R", "msgRegPasswordCheck")
-    register_clcmd("EMAIL_R", "msgRegEmail")
-	register_clcmd("PASSWORD_A", "msgAutologinPassword")
+    register_clcmd("EMAIL_R", "msgRegEMail")
+
+	register_menu("RegUserInfo Menu", KEYSMENU, "menu_userinfo")
+	register_menu("RegLoggedIn Menu", KEYSMENU, "menu_loggedin")
+	register_menu("RegLogin Menu", KEYSMENU, "menu_login")
+	register_menu("RegRegister Menu", KEYSMENU, "menu_register")
+}
+
+public cmdReg(id)
+{
+	if(!mg_reg_user_loading(id) || mg_reg_user_loggedin(id))
+		show_menu_loggedin(id)
+	else
+		show_menu_userinfo(id)
+}
+
+show_menu_loggedin(id)
+{
+	if(!is_user_connected(id) || is_user_bot(id))
+		return false
+		
+	new menu[500], title[60], len
+
+	mg_core_menu_title_create(id, "REG_TITLE_LOGGEDIN", title, charsmax(title))
+			
+	len += formatex(menu[len], charsmax(menu) - len, "%s^n", title)
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r0.\w %L", id, "REG_MENU_BACKTOMAIN")
+
+	// Fix for AMXX custom menus
+	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
+	show_menu(id, KEYSMENU, menu, -1, "RegLoggedIn Menu")
+	
+	return PLUGIN_HANDLED
+}
+
+public menu_loggedin(id, key)
+{
+	switch(key)
+	{
+	}
+	
+	return PLUGIN_HANDLED
+}
+
+show_menu_userinfo(id)
+{
+	if(!is_user_connected(id) || mg_reg_user_loggedin(id))
+		return false
+		
+	new menu[500], title[60], len
+	
+	mg_core_menu_title_create(id, "REG_TITLE_USERINFO", title, charsmax(title))
+
+	len += formatex(menu[len], charsmax(menu) - len, "%s^n", title)
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r1.\w %L^n", id, "REG_MENU_USERINFO1")
+	len += formatex(menu[len], charsmax(menu) - len, "\r2.\w %L^n", id, "REG_MENU_USERINFO2")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r3.\w %L^n", id, "REG_MENU_USERINFO4")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r0.\w %L", id, "REG_MENU_BACKTOMAIN")
+
+	// Fix for AMXX custom menus
+	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
+	show_menu(id, KEYSMENU, menu, -1, "RegUserInfo Menu")
+	
+	return PLUGIN_HANDLED
+}
+
+public menu_userinfo(id, key)
+{
+	switch(key)
+	{
+		case 0: show_menu_login(id)
+		case 1: show_menu_register(id)
+		case 2:
+		{
+			IDE NYELVVÁLTÁST
+			show_menu_userinfo(id)
+		}
+		case 9: zp_menu_main_show(id)
+	}
+	
+	return PLUGIN_HANDLED
+}
+
+show_menu_login(id)
+{
+	if(!is_user_connected(id) || is_user_bot(id))
+		return false
+		
+	new menu[500], title[60], len
+
+	mg_core_menu_title_create(id, "REG_TITLE_LOGIN", title, charsmax(title))
+			
+	len += formatex(menu[len], charsmax(menu) - len, "%s^n", title)
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	
+	if(gUsername[id][0])
+		len += formatex(menu[len], charsmax(menu) - len, "\r1.\w %L \r%s^n", id, "REG_MENU_LOGIN1", gUsername[id])
+	else
+		len += formatex(menu[len], charsmax(menu) - len, "\r1.\w %L \r%L^n", id, "REG_MENU_LOGIN1", id, "REG_MENU_NOUSERNAME")
+	
+	if(gPassword[id][0])
+		len += formatex(menu[len], charsmax(menu) - len, "\r2.\w %L \r*****^n", id, "REG_MENU_LOGIN2")
+	else
+		len += formatex(menu[len], charsmax(menu) - len, "\r2.\w %L \r%L^n", id, "REG_MENU_LOGIN2", id, "REG_MENU_NOPASSWORD")
+	
+	len += formatex(menu[len], charsmax(menu) - len, "\r3.\w %L^n", id, "REG_MENU_LOGIN3")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r4.\w %L^n", id, "REG_MENU_LOGIN4")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r0.\w %L", id, "REG_MENU_STEPBACK")
+			
+	// Fix for AMXX custom menus
+	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
+	show_menu(id, KEYSMENU, menu, -1, "RegLogin Menu")
+	
+	return PLUGIN_HANDLED
+}
+
+public menu_login(id, key)
+{
+	switch(key)
+	{
+		case 0:
+		{
+			client_cmd(id, "messagemode USERNAME_L")
+		}
+		case 1:
+		{
+			client_cmd(id, "messagemode PASSWORD_L")
+		}
+		case 2:
+		{
+			if(mg_reg_user_loading(id))
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
+				show_menu_login(id)
+				return PLUGIN_HANDLED
+			}
+			
+			if(!gUsername[id][0])
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_NOUSERNAMEGIVEN")
+				show_menu_login(id)
+				return PLUGIN_HANDLED
+			}
+			
+			if(!gPassword[id][0])
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_NOPASSWORDGIVEN")
+				show_menu_login(id)
+				return PLUGIN_HANDLED
+			}
+			
+			sqlLoadLogin(id)
+		}
+		case 3:
+		{
+			IDE NYELVVÁLTÁST
+			show_menu_login(id)
+		}
+		case 9:
+		{
+			show_menu_userinfo(id)
+		}
+	}
+	
+	return PLUGIN_HANDLED
+}
+
+show_menu_register(id)
+{
+	if(!is_user_connected(id) || is_user_bot(id))
+		return false
+		
+	new menu[500], title[60], len
+
+	mg_core_menu_title_create(id, "REG_TITLE_REGISTER", title, charsmax(title))
+			
+	len += formatex(menu[len], charsmax(menu) - len, "%s^n", title)
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	
+	if(gUsername[id][0])
+		len += formatex(menu[len], charsmax(menu) - len, "\r1.\w %L \r%s^n", id, "REG_MENU_REGISTER1", gUsername[id])
+	else
+		len += formatex(menu[len], charsmax(menu) - len, "\r1.\w %L \r%L^n", id, "REG_MENU_REGISTER1", id, "REG_MENU_NOUSERNAME")
+	
+	if(gPassword[id][0])
+		len += formatex(menu[len], charsmax(menu) - len, "\r2.\w %L \r*****^n", id, "REG_MENU_REGISTER2")
+	else
+		len += formatex(menu[len], charsmax(menu) - len, "\r2.\w %L \r%L^n", id, "REG_MENU_REGISTER2", id, "REG_MENU_NOPASSWORD")
+	
+	
+	if(gPasswordCheck[id][0])
+		len += formatex(menu[len], charsmax(menu) - len, "\r3.\w %L \r*****^n", id, "REG_MENU_REGISTER3")
+	else
+		len += formatex(menu[len], charsmax(menu) - len, "\r3.\w %L \r%L^n", id, "REG_MENU_REGISTER3", id, "REG_MENU_NOPASSWORD")
+	
+	len += formatex(menu[len], charsmax(menu) - len, "\r4.\w %L^n", id, "REG_MENU_REGISTER4")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r5.\w %L^n", id, "REG_MENU_REGISTER5")
+	len += formatex(menu[len], charsmax(menu) - len, "^n")
+	len += formatex(menu[len], charsmax(menu) - len, "\r0.\w %L", id, "REG_MENU_STEPBACK")
+			
+	// Fix for AMXX custom menus
+	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
+	show_menu(id, KEYSMENU, menu, -1, "RegRegister Menu")
+	
+	return PLUGIN_HANDLED
+}
+
+public menu_register(id, key)
+{
+	switch(key)
+	{
+		case 0:
+		{
+			client_cmd(id, "messagemode USERNAME_R")
+		}
+		case 1:
+		{
+			client_cmd(id, "messagemode PASSWORD1_R")
+		}
+		case 2:
+		{
+			client_cmd(id, "messagemode PASSWORD2_R")
+		}
+		case 3:
+		{
+			if(mg_reg_user_loading(id))
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
+				show_menu_login(id)
+				return PLUGIN_HANDLED
+			}
+			
+			if(!gUsername[id][0])
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_NOUSERNAMEGIVEN")
+				show_menu_register(id)
+				return PLUGIN_HANDLED
+			}
+			
+			if(!gPassword[id][0])
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_NOPASSWORDGIVEN")
+				show_menu_register(id)
+				return PLUGIN_HANDLED
+			}
+			
+			if(!gPasswordCheck[id][0])
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_NOPASSWORD2GIVEN")
+				show_menu_register(id)
+				return PLUGIN_HANDLED
+			}
+			
+			if(!equal(gPassword[id], gPasswordCheck[id]))
+			{
+				mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_PASSWORDSNOTSAME")
+				show_menu_register(id)
+				return PLUGIN_HANDLED
+			}
+			
+			sqlLoadReg(id)
+		}
+		case 4:
+		{
+			IDE NYELVVÁLTÁST
+			show_menu_register(id)
+		}
+		case 9:
+		{
+			show_menu_userinfo(id)
+		}
+	}
+	
+	return PLUGIN_HANDLED
 }
 
 public msgLoginUsername(id)
 {
-	if(flag_get(gLoadingUser, id))
+	if(mg_reg_user_loading(id))
 	{
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_USERSLOADING")
+		mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
 		show_menu_login(id)
 		return PLUGIN_HANDLED
 	}
@@ -33,6 +327,7 @@ public msgLoginUsername(id)
 	if(read_args(msg, charsmax(msg)))
 	{
 		remove_quotes(msg)
+
 		copy(gUsername[id], charsmax(gUsername[]), msg) 
 	}
 	
@@ -42,9 +337,9 @@ public msgLoginUsername(id)
 
 public msgLoginPassword(id)
 {
-	if(flag_get(gLoadingUser, id))
+	if(mg_reg_user_loading(id))
 	{
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_USERSLOADING")
+		mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
 		show_menu_login(id)
 		return PLUGIN_HANDLED
 	}
@@ -63,9 +358,9 @@ public msgLoginPassword(id)
 
 public msgRegUsername(id)
 {
-	if(flag_get(gLoadingUser, id))
+	if(mg_reg_user_loading(id))
 	{
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_USERSLOADING")
+		mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
 		show_menu_register(id)
 		return PLUGIN_HANDLED
 	}
@@ -75,6 +370,14 @@ public msgRegUsername(id)
 	if(read_args(msg, charsmax(msg)))
 	{
 		remove_quotes(msg)
+
+		if(strlen(msg) > MAX_USERNAME_LENGTH || strlen(msg) < MIN_USERNAME_LENGTH)
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_INVALIDSIZE", MAX_USARNAME_LENGTH, MIN_USERNAME_LENGTH)
+			show_menu_register(id)
+			return PLUGIN_HANDLED
+		}
+
 		copy(gUsername[id], charsmax(gUsername[]), msg) 
 	}
 	
@@ -84,9 +387,9 @@ public msgRegUsername(id)
 
 public msgRegPassword(id)
 {
-	if(flag_get(gLoadingUser, id))
+	if(mg_reg_user_loading(id))
 	{
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_USERSLOADING")
+		mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
 		show_menu_register(id)
 		return PLUGIN_HANDLED
 	}
@@ -96,6 +399,14 @@ public msgRegPassword(id)
 	if(read_args(msg, charsmax(msg)))
 	{
 		remove_quotes(msg)
+		
+		if(strlen(msg) > MAX_PASSWORD_LENGTH || strlen(msg) < MIN_PASSWORD_LENGTH)
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_INVALIDSIZE", MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH)
+			show_menu_register(id)
+			return PLUGIN_HANDLED
+		}
+
 		copy(gPassword[id], charsmax(gPassword[]), msg) 
 	}
 	
@@ -105,9 +416,9 @@ public msgRegPassword(id)
 
 public msgRegPasswordCheck(id)
 {
-	if(flag_get(gLoadingUser, id))
+	if(mg_reg_user_loading(id))
 	{
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_USERSLOADING")
+		mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
 		show_menu_register(id)
 		return PLUGIN_HANDLED
 	}
@@ -123,12 +434,12 @@ public msgRegPasswordCheck(id)
 	return PLUGIN_HANDLED
 }
 
-public msgAutologinPassword(id)
+public msgRegEMail(id)
 {
-	if(flag_get(gLoadingUser, id))
+	if(mg_reg_user_loading(id))
 	{
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_USERSLOADING")
-		show_menu_loggedin(id)
+		mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_USERSLOADING")
+		show_menu_register(id)
 		return PLUGIN_HANDLED
 	}
 	
@@ -136,16 +447,24 @@ public msgAutologinPassword(id)
 	if(read_args(msg, charsmax(msg)))
 	{
 		remove_quotes(msg)
-		
-		if(equal(gPassword[id], msg))
+
+		if(strlen(msg) > MAX_EMAIL_LENGTH || strlen(msg) < MIN_EMAIL_LENGTH)
 		{
-			client_cmd(id, "setinfo ^"_ebareg^" ^"%s//%s^"", gUsername[id], gPassword[id])
-			eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_AUTOLOGIN", gUsername[id], gPassword[id])
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_INVALIDSIZE", MAX_EMAIL_LENGTH, MIN_EMAIL_LENGTH)
+			show_menu_register(id)
+			return PLUGIN_HANDLED
 		}
+
+		if(contain(msg, "@") == -1 || contain(msg, ".") == -1)
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_INVALIDEMAIL")
+			show_menu_register(id)
+			return PLUGIN_HANDLED
+		}
+
+		copy(gEMail[id], charsmax(gEMail[]), msg) 
 	}
-	else
-		eba_cmessage(id, CM_FIX, "%s%L", chatPrefix, id, "CHAT_WRONGPASSWORD")
 	
-	show_menu_loggedin(id)
+	show_menu_register(id)
 	return PLUGIN_HANDLED
 }

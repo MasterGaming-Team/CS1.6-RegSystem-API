@@ -1,5 +1,6 @@
 #include <amxmodx>
 #include <amxmisc>
+#include <fakemeta>
 #include <mg_core>
 #include <mg_regsystem_api>
 
@@ -11,24 +12,25 @@
 #define flag_set(%1,%2) %1 |= (1 << (%2 & 31))
 #define flag_unset(%1,%2) %1 &= ~(1 << (%2 & 31))
 
+const OFFSET_CSMENUCODE = 205
 const KEYSMENU = MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4|MENU_KEY_5|MENU_KEY_6|MENU_KEY_7|MENU_KEY_8|MENU_KEY_9|MENU_KEY_0
 
 new gUsername[33][MAX_USERNAME_LENGTH+1], gPassword[33][MAX_PASSWORD_LENGTH+1], gPasswordCheck[33][MAX_PASSWORD_LENGTH+1], gEMail[33][MAX_EMAIL_LENGTH+1]
 
 public plugin_init()
 {
-    register_plugin(PLUGIN, VERSION, AUTHOR)
+	register_plugin(PLUGIN, VERSION, AUTHOR)
 
 	mg_core_command_reg("reg", "cmdReg")
 	mg_core_command_reg("login", "cmdReg")
-	mg_core_command_reg("register", "cmdReg")
+	mg_core_command_reg("register", "cmdReg")	
 
 	register_clcmd("USERNAME_L", "msgLoginUsername")
 	register_clcmd("PASSWORD_L", "msgLoginPassword")
 	register_clcmd("USERNAME_R", "msgRegUsername")
 	register_clcmd("PASSWORD1_R", "msgRegPassword")
 	register_clcmd("PASSWORD2_R", "msgRegPasswordCheck")
-    register_clcmd("EMAIL_R", "msgRegEMail")
+	register_clcmd("EMAIL_R", "msgRegEMail")	
 
 	register_menu("RegUserInfo Menu", KEYSMENU, "menu_userinfo")
 	register_menu("RegLoggedIn Menu", KEYSMENU, "menu_loggedin")
@@ -38,15 +40,15 @@ public plugin_init()
 
 public cmdReg(id)
 {
-	if(!mg_reg_user_loading(id) || mg_reg_user_loggedin(id))
-		show_menu_loggedin(id)
-	else
+	if(!show_menu_loggedin(id))
 		show_menu_userinfo(id)
+	
+	return PLUGIN_HANDLED
 }
 
 show_menu_loggedin(id)
 {
-	if(!is_user_connected(id) || is_user_bot(id))
+	if(!is_user_connected(id) || !mg_reg_user_loggedin(id))
 		return false
 		
 	new menu[500], title[60], len
@@ -63,7 +65,7 @@ show_menu_loggedin(id)
 	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
 	show_menu(id, KEYSMENU, menu, -1, "RegLoggedIn Menu")
 	
-	return PLUGIN_HANDLED
+	return true
 }
 
 public menu_loggedin(id, key)
@@ -97,7 +99,7 @@ show_menu_userinfo(id)
 	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
 	show_menu(id, KEYSMENU, menu, -1, "RegUserInfo Menu")
 	
-	return PLUGIN_HANDLED
+	return true
 }
 
 public menu_userinfo(id, key)
@@ -108,10 +110,10 @@ public menu_userinfo(id, key)
 		case 1: show_menu_register(id)
 		case 2:
 		{
-			IDE NYELVVÁLTÁST
+			// IDE NYELVVÁLTÁST
 			show_menu_userinfo(id)
 		}
-		case 9: zp_menu_main_show(id)
+		//case 9: mód főmenüjének megnyitása
 	}
 	
 	return PLUGIN_HANDLED
@@ -119,7 +121,7 @@ public menu_userinfo(id, key)
 
 show_menu_login(id)
 {
-	if(!is_user_connected(id) || is_user_bot(id))
+	if(!is_user_connected(id) || mg_reg_user_loggedin(id))
 		return false
 		
 	new menu[500], title[60], len
@@ -149,11 +151,14 @@ show_menu_login(id)
 	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
 	show_menu(id, KEYSMENU, menu, -1, "RegLogin Menu")
 	
-	return PLUGIN_HANDLED
+	return true
 }
 
 public menu_login(id, key)
 {
+	if(mg_reg_user_loggedin(id))
+		return PLUGIN_HANDLED
+
 	switch(key)
 	{
 		case 0:
@@ -187,11 +192,15 @@ public menu_login(id, key)
 				return PLUGIN_HANDLED
 			}
 			
-			sqlLoadLogin(id)
+			new lHashPassword[33]
+			hash_string(gPassword[id], Hash_Md5, lHashPassword, charsmax(lHashPassword))
+
+			mg_reg_user_login(id, gUsername[id], lHashPassword)
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGINPLSWAIT")
 		}
 		case 3:
 		{
-			IDE NYELVVÁLTÁST
+			// IDE NYELVVÁLTÁST
 			show_menu_login(id)
 		}
 		case 9:
@@ -205,7 +214,7 @@ public menu_login(id, key)
 
 show_menu_register(id)
 {
-	if(!is_user_connected(id) || is_user_bot(id))
+	if(!is_user_connected(id) || mg_reg_user_loggedin(id))
 		return false
 		
 	new menu[500], title[60], len
@@ -241,11 +250,14 @@ show_menu_register(id)
 	set_pdata_int(id, OFFSET_CSMENUCODE, 0)
 	show_menu(id, KEYSMENU, menu, -1, "RegRegister Menu")
 	
-	return PLUGIN_HANDLED
+	return true
 }
 
 public menu_register(id, key)
 {
+	if(mg_reg_user_loggedin(id))
+		return PLUGIN_HANDLED
+	
 	switch(key)
 	{
 		case 0:
@@ -297,11 +309,15 @@ public menu_register(id, key)
 				return PLUGIN_HANDLED
 			}
 			
-			sqlLoadReg(id)
+			new lHashPassword[33]
+			hash_string(gPassword[id], Hash_Md5, lHashPassword, charsmax(lHashPassword))
+
+			mg_reg_user_register(id, gUsername[id], lHashPassword, gEMail[id])
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_REGPLSWAIT")
 		}
 		case 4:
 		{
-			IDE NYELVVÁLTÁST
+			// IDE NYELVVÁLTÁST
 			show_menu_register(id)
 		}
 		case 9:
@@ -373,7 +389,7 @@ public msgRegUsername(id)
 
 		if(strlen(msg) > MAX_USERNAME_LENGTH || strlen(msg) < MIN_USERNAME_LENGTH)
 		{
-			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_INVALIDSIZE", MAX_USARNAME_LENGTH, MIN_USERNAME_LENGTH)
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_INVALIDSIZE", MAX_USERNAME_LENGTH, MIN_USERNAME_LENGTH)
 			show_menu_register(id)
 			return PLUGIN_HANDLED
 		}
@@ -467,4 +483,77 @@ public msgRegEMail(id)
 	
 	show_menu_register(id)
 	return PLUGIN_HANDLED
+}
+
+public mg_fw_client_register_failed(id, errorType)
+{
+	switch(errorType)
+	{
+		case ERROR_SQL_ERROR:
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_REGSQLERROR", "SQLERROR_REG")
+			show_menu_register(id)
+		}
+		case ERROR_ACCOUNT_USED:
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_REGUSERNAMETAKEN")
+			show_menu_register(id)
+		}
+	}
+}
+
+public mg_fw_client_register_success(id)
+{
+	new lHashPassword[33]
+
+	mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_REGSUCCESSFUL")
+	mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGINLOADING")
+
+	hash_string(gPassword[id], Hash_Md5, lHashPassword, charsmax(lHashPassword))
+
+	mg_reg_user_login(id, gUsername[id], lHashPassword)
+}
+
+public mg_fw_client_login_failed(id, errorType)
+{
+	switch(errorType)
+	{
+		case ERROR_ACCOUNT_NOT_FOUND:
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGINNOSUCHACCOUNT")
+			show_menu_login(id)
+		}
+		case ERROR_SQL_ERROR:
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGINSQLERROR", "SQLERROR_LOGIN")
+			show_menu_login(id)
+		}
+		case ERROR_ACCOUNT_USED:
+		{
+			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGINACCOUNTINUSE")
+			show_menu_login(id)
+		}
+	}
+}
+
+public mg_fw_client_login_success(id)
+{
+	mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGINSUCCESSFUL")
+}
+
+public client_connect(id)
+{
+	client_clean(id)
+}
+
+public client_disconnected(id)
+{
+	client_clean(id)
+}
+
+client_clean(id)
+{
+	gUsername[id][0] = EOS
+	gPassword[id][0] = EOS
+	gEMail[id][0] = EOS
 }

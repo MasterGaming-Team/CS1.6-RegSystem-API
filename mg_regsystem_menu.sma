@@ -12,9 +12,6 @@
 #define flag_set(%1,%2) %1 |= (1 << (%2 & 31))
 #define flag_unset(%1,%2) %1 &= ~(1 << (%2 & 31))
 
-const OFFSET_CSMENUCODE = 205
-const KEYSMENU = MENU_KEY_1|MENU_KEY_2|MENU_KEY_3|MENU_KEY_4|MENU_KEY_5|MENU_KEY_6|MENU_KEY_7|MENU_KEY_8|MENU_KEY_9|MENU_KEY_0
-
 new gUsername[33][MAX_USERNAME_LENGTH+1], gPassword[33][MAX_PASSWORD_LENGTH+1], gPasswordCheck[33][MAX_PASSWORD_LENGTH+1], gEMail[33][MAX_EMAIL_LENGTH+1]
 
 public plugin_init()

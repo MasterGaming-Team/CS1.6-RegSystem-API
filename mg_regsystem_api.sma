@@ -26,6 +26,7 @@ new Handle:gSqlRegTuple
 
 new gForwardClientSuccessRegister, gForwardClientFailedRegister
 new gForwardClientSuccessLogin, gForwardClientProcessLogin, gForwardClientFailedLogin
+new gForwardClientLogout
 new gForwardClientClean, gForwardClientSqlSave
 
 enum _:dataTypes
@@ -45,13 +46,22 @@ public plugin_init()
 	gForwardClientSuccessLogin = CreateMultiForward("mg_fw_client_login_success", ET_CONTINUE, FP_CELL)
 	gForwardClientProcessLogin = CreateMultiForward("mg_fw_client_login_process", ET_CONTINUE, FP_CELL)
 	gForwardClientFailedLogin = CreateMultiForward("mg_fw_client_login_failed", ET_CONTINUE, FP_CELL, FP_CELL)
+	gForwardClientLogout = CreateMultiForward("mg_fw_client_logout", ET_CONTINUE, FP_CELL)
 	gForwardClientClean = CreateMultiForward("mg_fw_client_clean", ET_CONTINUE, FP_CELL)
 	gForwardClientSqlSave = CreateMultiForward("mg_fw_client_sql_save", ET_CONTINUE, FP_CELL, FP_CELL)
 }
 
+public plugin_cfg()
+{
+	new sqlText[256]
+
+	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveCS1=^"%d^";", 0)
+	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
+}
+
 public plugin_natives()
 {	
-	gSqlRegTuple = SQL_MakeDbTuple("127.0.0.1","ebateam_forum", "z8hEn1gEUTWaSzfY","ebateam_forum")
+	gSqlRegTuple = SQL_MakeDbTuple("127.0.0.1", "root", "MG2020asdMK", "account_informations")
 	
 	register_native("mg_reg_user_loading", "native_reg_user_loading")
 	register_native("mg_reg_user_loggedin", "native_reg_user_loggedin")
@@ -85,9 +95,11 @@ public sqlRegisterHandle(FailState, Handle:Query, error[], errorcode, data[], da
 		return
 	}
 	
-	new sqlText[500], len
+	new sqlText[500], len, subData[1]
 	new lSteamId[MAX_AUTHID_LENGTH+1], lName[MAX_NAME_LENGTH+1], lSetinfoPwHash[MAX_SETINFOPW_LENGTH+1], lRegDate[30]
 	
+	subData[0] = id
+
 	get_user_authid(id, lSteamId, charsmax(lSteamId))
 	get_user_name(id, lName, charsmax(lName))
 	getSetinfoPwHash(id, lSetinfoPwHash, charsmax(lSetinfoPwHash))
@@ -98,7 +110,7 @@ public sqlRegisterHandle(FailState, Handle:Query, error[], errorcode, data[], da
 	len += formatex(sqlText[len], charsmax(sqlText) - len, "VALUE ")
 	len += formatex(sqlText[len], charsmax(sqlText) - len, "(^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^", ^"%s^");",
 				data[dt_username], data[dt_password], data[dt_email], lName, lSteamId, lSetinfoPwHash, lName, lSteamId, lRegDate)
-	SQL_ThreadQuery(gSqlRegTuple, "sqlRegisterInsertHandle", sqlText)
+	SQL_ThreadQuery(gSqlRegTuple, "sqlRegisterInsertHandle", sqlText, subData, 1)
 }
 
 public sqlRegisterInsertHandle(FailState, Handle:Query, error[], errorcode, data[], datasize, Float:fQueueTime)
@@ -115,6 +127,7 @@ public sqlRegisterInsertHandle(FailState, Handle:Query, error[], errorcode, data
 		return
 	}
 	
+	flag_unset(gLoadingUser, id)
 	ExecuteForward(gForwardClientSuccessRegister, retValue, id)
 }
 
@@ -155,7 +168,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 		return
 	}
 	
-	new activeAccount = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "accountActiveZP"))
+	new activeAccount = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "accountActiveCS1"))
 	
 	if(activeAccount)
 	{
@@ -236,6 +249,11 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 				
 				lAutoLogin = true
 			}
+
+			if(lAutoLogin)
+				break
+
+			SQL_NextRow(Query)
 		}
 		
 		if(!lAutoLogin)
@@ -248,18 +266,22 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 	}
 	
 	gAccountId[id] = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "accountId"))
-	
+	gGameTime[id] = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "gameTime"))
+
 	new sqlText[256]
 	
-	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveZP=^"%d^" WHERE accountId=^"%d^";", true, gAccountId[id])
+	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveCS1=^"%d^" WHERE accountId=^"%d^";", 1, gAccountId[id])
 	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
-	
-	gGameTime[id] = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "gameTime"))
 	
 	ExecuteForward(gForwardClientProcessLogin, retValue, id)
 	
 	if(!retValue)
+	{
+		flag_set(gLoggedIn, id)
+		flag_unset(gAutoLogin, id)
+		flag_unset(gLoadingUser, id)
 		ExecuteForward(gForwardClientSuccessLogin, retValue, id)
+	}
 }
 
 public sqlGeneralHandle(FailState, Handle:Query, error[],errcode, data[], datasize)
@@ -280,6 +302,9 @@ public checkSqlArray(taskId)
 		new retValue
 
 		ArrayDestroy(arrayUserLoadingSql[id])
+		flag_set(gLoggedIn, id)
+		flag_unset(gAutoLogin, id)
+		flag_unset(gLoadingUser, id)
 		ExecuteForward(gForwardClientSuccessLogin, retValue, id)
 	}
 }
@@ -333,9 +358,10 @@ public saveAccountData(taskId)
 	if(loggingOut)
 		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_LOGOUT)
 	else
+	{
 		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_REGULAR)
-	
-	set_task(30.0, "sqlSaveData", TASKID1+id)
+		set_task(30.0, "sqlSaveData", TASKID1+id)
+	}
 }
 
 public native_reg_user_loading(plugin_id, param_num)
@@ -444,7 +470,7 @@ public native_reg_user_logout(plugin_id, param_num)
 		return false
 	}
 	
-	if(!flag_get(gLoadingUser, id))
+	if(flag_get(gLoadingUser, id))
 	{
 		new lName[MAX_NAME_LENGTH+1]
 		
@@ -513,13 +539,12 @@ client_clean(id, bool:disconnect = false)
 	if(disconnect)
 	{
 		remove_task(TASKID1+id)
-		
 		saveAccountData(TASKID1+(id*33))
 	}
 	
 	new sqlText[128], retValue
 	
-	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveZP=^"%d^" WHERE accountId=^"%d^";", false, gAccountId[id])
+	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveCS1=^"%d^" WHERE accountId=^"%d^";", 0, gAccountId[id])
 	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
 	
 	ArrayDestroy(arrayUserLoadingSql[id])
@@ -576,7 +601,7 @@ userLogin(id, const username[]="", const password[]="")
 		get_user_name(id, lName, charsmax(lName))
 		getSetinfoPwHash(id, lSetinfoPwHash, charsmax(lSetinfoPwHash))
 		
-		formatex(lSqlTxt, charsmax(lSqlTxt), "SELECT * FROM regSystemAccounts WHERE lastSteamId=^"%s^" OR lastName=^"%s^" OR (lastSetinfoPw=^"%s^" AND lastSetinfoPw!=^"^");", lSteamId, lName, lSetinfoPwHash)
+		formatex(lSqlTxt, charsmax(lSqlTxt), "SELECT * FROM regSystemAccounts WHERE lastSteamId=^"%s^" OR lastName=^"%s^" OR (lastSetinfoPwHash=^"%s^" AND lastSetinfoPwHash!=^"^");", lSteamId, lName, lSetinfoPwHash)
 	}
 	SQL_ThreadQuery(gSqlRegTuple, "sqlLoginHandle", lSqlTxt, data, 1)
 	
@@ -592,7 +617,7 @@ userLogout(id)
 	
 	new sqlText[128], retValue
 	
-	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveZP=^"%d^" WHERE accountId=^"%d^";", false, gAccountId[id])
+	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveCS1=^"%d^" WHERE accountId=^"%d^";", 0, gAccountId[id])
 	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
 	
 	remove_task(TASKID2+id)
@@ -606,6 +631,7 @@ userLogout(id)
 	gGameTime[id] = 0
 	
 	ExecuteForward(gForwardClientClean, retValue, id)
+	ExecuteForward(gForwardClientLogout, retValue, id)
 	flag_unset(gLoadingUser, id)
 }
 

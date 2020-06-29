@@ -1,0 +1,101 @@
+[hu]
+REG_TITLE_LOGGEDIN = Felhasználó Menü
+REG_MENU_LOGGEDIN1 = Kijelentkezés
+
+REG_TITLE_USERINFO = Regisztrációs Rendszer
+REG_MENU_USERINFO1 = Bejelentkezés
+REG_MENU_USERINFO2 = Regisztráció
+REG_MENU_USERINFO3 = nyelvváltásoscumó
+
+REG_TITLE_LOGIN = Bejelentkezés
+REG_MENU_LOGIN1 = Felhasználónév:
+REG_MENU_LOGIN2 = Jelszó:
+REG_MENU_LOGIN3 = Bejelentkezés
+REG_MENU_LOGIN4 = nyelvváltásoscumó
+
+REG_TITLE_REGISTER = Regisztráció
+REG_MENU_REGISTER1 = Felhasználónév:
+REG_MENU_REGISTER2 = Jelszó:
+REG_MENU_REGISTER3 = Jelszó újra:
+REG_MENU_REGISTER4 = E-Mail:
+REG_MENU_REGISTER5 = Regisztráció
+
+REG_MENU_NOUSERNAME = Nincs Megadva
+REG_MENU_NOPASSWORD = Nincs Megadva
+REG_MENU_STEPBACK = Vissza
+REG_MENU_BACKTOMAIN = Vissza a FöMenübe
+
+REG_CHAT_USERSLOADING = Jelenleg betöltés alatt állsz. !tKérlek várj türelemmel!
+REG_CHAR_NOUSERNAMEGIVEN = Nincs megadva felhasználónév!
+REG_CHAT_NOPASSWORDGIVEN = Nincs megadva jelszó!
+REG_CHAT_NOPASSWORD2GIVEN = Nincs megadva megerősítő jelszó!
+REG_CHAT_NOEMAILGIVEN = Nincs megadva e-mail!
+REG_CHAT_PASSWORDSNOTSAME = A két jelszó nem egyezik!
+REG_CHAT_LOGINPLSWAIT = Bejelentkezés... !tKérlek várj egy kicsit!
+REG_CHAT_REGPLSWAIT = Regisztráció... !tKérlek várj egy kicsit!
+REG_CHAT_INVALIDSIZE = Érvénytelen szöveg méret! !gMin/Max karakter: %d/%d
+REG_CHAT_INVALIDEMAIL = Érvénytelen e-mail formátum!
+
+REG_CHAT_REGSQLERROR = MySQL hiba történt! Kérlek próbáld újra! Hibakód: %s
+REG_CHAT_REGUSERNAMETAKEN = Ez a felhasználónév már foglalt!
+REG_CHAT_LOGINNOSUCHACCOUNT = Rossz felhasználónév vagy jelszó!
+REG_CHAT_LOGINSQLERROR = MySQL hiba történt! Kérlek próbáld újra! Hibakód: %s
+REG_CHAT_LOGINACCOUNTINUSE = Ez a felhasználó már használatban van!
+REG_CHAT_REGSUCCESSFUL = Sikeres regisztráció!
+REG_CHAT_LOGINLOADING = Bejelenkezés folyamatban...
+REG_CHAT_LOGINSUCCESSFUL = Sikeres bejelentkezés! Üdv köztünk!
+REG_CHAT_LOGOUT = Sikeresen kijelentkeztél!
+
+REG_CHAT_LOGOUTPROCESS = Kijelentkezés folyamatban!
+
+[en]
+
+[def]
+REG_TITLE_LOGGEDIN = 
+REG_MENU_LOGGEDIN1 = 
+
+REG_TITLE_USERINFO = 
+REG_MENU_USERINFO1 = 
+REG_MENU_USERINFO2 = 
+REG_MENU_USERINFO3 = 
+
+REG_TITLE_LOGIN = 
+REG_MENU_LOGIN1 = 
+REG_MENU_LOGIN2 = 
+REG_MENU_LOGIN3 = 
+REG_MENU_LOGIN4 = 
+
+REG_TITLE_REGISTER = 
+REG_MENU_REGISTER1 = 
+REG_MENU_REGISTER2 = 
+REG_MENU_REGISTER3 = 
+REG_MENU_REGISTER4 = 
+REG_MENU_REGISTER5 = 
+
+REG_MENU_NOUSERNAME = 
+REG_MENU_NOPASSWORD = 
+REG_MENU_STEPBACK = 
+REG_MENU_BACKTOMAIN = 
+
+REG_CHAT_USERSLOADING = 
+REG_CHAR_NOUSERNAMEGIVEN = 
+REG_CHAT_NOPASSWORDGIVEN = 
+REG_CHAT_NOPASSWORD2GIVEN = 
+REG_CHAT_NOEMAILGIVEN = 
+REG_CHAT_PASSWORDSNOTSAME = 
+REG_CHAT_LOGINPLSWAIT = 
+REG_CHAT_REGPLSWAIT = 
+REG_CHAT_INVALIDSIZE = 
+REG_CHAT_INVALIDEMAIL = 
+
+REG_CHAT_REGSQLERROR = 
+REG_CHAT_REGUSERNAMETAKEN = 
+REG_CHAT_LOGINNOSUCHACCOUNT = 
+REG_CHAT_LOGINSQLERROR = 
+REG_CHAT_LOGINACCOUNTINUSE = 
+REG_CHAT_REGSUCCESSFUL = 
+REG_CHAT_LOGINLOADING = 
+REG_CHAT_LOGINSUCCESSFUL = 
+REG_CHAT_LOGOUT = 
+
+REG_CHAT_LOGOUT_PROCESS = 

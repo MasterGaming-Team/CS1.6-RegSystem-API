@@ -702,7 +702,6 @@ getSetinfoPwHash(id, string[], len)
 	hash_string(string, Hash_Md5, string, len)
 	return true
 }
-
 /* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE
 *{\\ rtf1\\ ansi\\ deff0{\\ fonttbl{\\ f0\\ fnil Tahoma;}}\n\\ viewkind4\\ uc1\\ pard\\ lang1066\\ f0\\ fs16 \n\\ par }
 */

@@ -57,6 +57,13 @@ show_menu_loggedin(id)
 	len += formatex(menu[len], charsmax(menu) - len, "%s^n", title)
 	len += formatex(menu[len], charsmax(menu) - len, "^n")
 	len += formatex(menu[len], charsmax(menu) - len, "\r1.\w %L^n", id, "REG_MENU_LOGGEDIN1")
+	len += formatex(menu[len], charsmax(menu) - len, "\r5.\w %L: %L^n", id, "REG_MENU_LOGGEDIN5", id, mg_reg_user_setting_get(id) ? "REG_MENU_SETTINGON":"REG_MENU_SETTINGOFF")
+	if(mg_reg_user_setting_get(id))
+	{
+		len += formatex(menu[len], charsmax(menu) - len, "\r   6.\w %L: %L^n", id, "REG_MENU_LOGGEDIN6", id, mg_reg_user_setting_get(id, MG_SETTING_AUTOLOGINAUTHID) ? "REG_MENU_SETTINGON":"REG_MENU_SETTINGOFF")
+		len += formatex(menu[len], charsmax(menu) - len, "\r   7.\w %L: %L^n", id, "REG_MENU_LOGGEDIN7", id, mg_reg_user_setting_get(id, MG_SETTING_AUTOLOGINNAME) ? "REG_MENU_SETTINGON":"REG_MENU_SETTINGOFF")
+		len += formatex(menu[len], charsmax(menu) - len, "\r   8.\w %L: %L^n", id, "REG_MENU_LOGGEDIN8", id, mg_reg_user_setting_get(id, MG_SETTING_AUTOLOGINSETINFO) ? "REG_MENU_SETTINGON":"REG_MENU_SETTINGOFF")
+	}
 	len += formatex(menu[len], charsmax(menu) - len, "^n")
 	len += formatex(menu[len], charsmax(menu) - len, "\r0.\w %L", id, "REG_MENU_BACKTOMAIN")
 
@@ -75,6 +82,59 @@ public menu_loggedin(id, key)
 		{
 			mg_core_chatmessage_print(id, MG_CM_FIX, _, "%L", id, "REG_CHAT_LOGOUTPROCESS")
 			mg_reg_user_logout(id)
+		}
+		case 4:
+		{
+			if(mg_reg_user_setting_get(id))
+			{
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGIN, false)
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINAUTHID, false)
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINNAME, false)
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINSETINFO, false)
+			}
+			else
+			{
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGIN, true)
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINAUTHID, true)
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINNAME, true)
+				mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINSETINFO, true)
+			}
+			show_menu_loggedin(id)
+		}
+		case 5:
+		{
+			if(mg_reg_user_setting_get(id))
+			{
+				if(mg_reg_user_setting_get(id, MG_SETTING_AUTOLOGINAUTHID))
+					mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINAUTHID, false)
+				else
+					mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINAUTHID, true)
+			}
+			show_menu_loggedin(id)
+		}
+		case 6:
+		{
+			if(mg_reg_user_setting_get(id))
+			{
+				if(mg_reg_user_setting_get(id, MG_SETTING_AUTOLOGINNAME))
+					mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINNAME, false)
+				else
+					mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINNAME, true)
+			}
+			show_menu_loggedin(id)
+		}
+		case 7:
+		{
+			checkUserSetinfoPW(id)
+
+			if(mg_reg_user_setting_get(id))
+			{
+				if(mg_reg_user_setting_get(id, MG_SETTING_AUTOLOGINSETINFO))
+					mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINSETINFO, false)
+				else
+					mg_reg_user_setting_set(id, MG_SETTING_AUTOLOGINSETINFO, true)
+			}
+			show_menu_loggedin(id)
 		}
 	}
 	
@@ -585,4 +645,31 @@ client_clean(id)
 	gUsername[id][0] = EOS
 	gPassword[id][0] = EOS
 	gEMail[id][0] = EOS
+}
+
+checkUserSetinfoPW(id)
+{
+	new lSetinfoPW[33]
+	get_user_info(id, "_pw", lSetinfoPW, charsmax(lSetinfoPW))
+
+	if(!lSetinfoPW[0])
+	{
+		GenerateString(lSetinfoPW, 8)
+		client_cmd(id, "setinfo ^"_pw^" ^"%s^"", lSetinfoPW)
+		client_print(id, print_chat, "trueee")
+	}
+	client_print(id, print_chat, "%s", lSetinfoPW)
+}
+
+//By Exolent[jNr]
+GenerateString(output[], const len)
+{
+	new choices[62] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWYZ0123456789"
+
+	for(new i = 0; i < len; i++)
+	{
+		output[i] = choices[random(charsmax(choices))]
+	}
+    
+	return len
 }

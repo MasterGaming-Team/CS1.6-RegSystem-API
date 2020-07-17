@@ -17,7 +17,7 @@
 #define flag_set(%1,%2) %1 |= (1 << (%2 & 31))
 #define flag_unset(%1,%2) %1 &= ~(1 << (%2 & 31))
 
-new gAccountId[33], gGameTime[33]
+new gAccountId[33], gGameTime[33], gUserSettings[33][4]
 new gLoggedIn, gAutoLogin, gLoadingUser
 
 new Array:arrayUserLoadingSql[33]
@@ -44,11 +44,11 @@ public plugin_init()
 	gForwardClientSuccessRegister = CreateMultiForward("mg_fw_client_register_success", ET_CONTINUE, FP_CELL)
 	gForwardClientFailedRegister = CreateMultiForward("mg_fw_client_register_failed", ET_CONTINUE, FP_CELL, FP_CELL)
 	gForwardClientSuccessLogin = CreateMultiForward("mg_fw_client_login_success", ET_CONTINUE, FP_CELL)
-	gForwardClientProcessLogin = CreateMultiForward("mg_fw_client_login_process", ET_CONTINUE, FP_CELL)
+	gForwardClientProcessLogin = CreateMultiForward("mg_fw_client_login_process", ET_CONTINUE, FP_CELL, FP_CELL)
 	gForwardClientFailedLogin = CreateMultiForward("mg_fw_client_login_failed", ET_CONTINUE, FP_CELL, FP_CELL)
 	gForwardClientLogout = CreateMultiForward("mg_fw_client_logout", ET_CONTINUE, FP_CELL)
 	gForwardClientClean = CreateMultiForward("mg_fw_client_clean", ET_CONTINUE, FP_CELL)
-	gForwardClientSqlSave = CreateMultiForward("mg_fw_client_sql_save", ET_CONTINUE, FP_CELL, FP_CELL)
+	gForwardClientSqlSave = CreateMultiForward("mg_fw_client_sql_save", ET_CONTINUE, FP_CELL, FP_CELL, FP_CELL)
 }
 
 public plugin_cfg()
@@ -61,8 +61,11 @@ public plugin_cfg()
 
 public plugin_natives()
 {	
-	gSqlRegTuple = SQL_MakeDbTuple("127.0.0.1", "root", "MG2020asdMK", "account_informations")
+	gSqlRegTuple = SQL_MakeDbTuple("127.0.0.1", "MG_Accounts", "MghZ2DzDZV8WG9Gr", "account_informations")
 	
+	register_native("mg_reg_user_setting_get", "native_reg_user_setting_get")
+	register_native("mg_reg_user_setting_set", "native_reg_user_setting_set")
+
 	register_native("mg_reg_user_loading", "native_reg_user_loading")
 	register_native("mg_reg_user_loggedin", "native_reg_user_loggedin")
 	register_native("mg_reg_user_register", "native_reg_user_register")
@@ -193,12 +196,27 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 		return
 	}
 	
+	new lUserSettings[sizeof(gUserSettings[])]
+	
 	if(flag_get(gAutoLogin, id))
 	{
 		new lAutoLogin = false
-		
+
 		while(SQL_MoreResults(Query) && !lAutoLogin)
 		{
+			lUserSettings[MG_SETTING_AUTOLOGIN] = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "settingAutoLogin"))
+
+			if(!lUserSettings[MG_SETTING_AUTOLOGIN])
+			{
+				lAutoLogin = false
+				SQL_NextRow(Query)
+				continue
+			}
+			
+			lUserSettings[MG_SETTING_AUTOLOGINAUTHID] = 0
+			lUserSettings[MG_SETTING_AUTOLOGINNAME] = 0
+			lUserSettings[MG_SETTING_AUTOLOGINSETINFO] = 0
+
 			if(SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "settingAutoLoginSteamId")))
 			{
 				new lSteamIdSql[MAX_AUTHID_LENGTH+1], lSteamId[MAX_AUTHID_LENGTH+1]
@@ -213,6 +231,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 					continue
 				}
 				
+				lUserSettings[MG_SETTING_AUTOLOGINAUTHID] = 1
 				lAutoLogin = true
 			}
 			
@@ -230,6 +249,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 					continue
 				}
 				
+				lUserSettings[MG_SETTING_AUTOLOGINNAME] = 1
 				lAutoLogin = true
 			}
 			
@@ -247,6 +267,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 					continue
 				}
 				
+				lUserSettings[MG_SETTING_AUTOLOGINSETINFO] = 1
 				lAutoLogin = true
 			}
 
@@ -267,13 +288,18 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 	
 	gAccountId[id] = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "accountId"))
 	gGameTime[id] = SQL_ReadResult(Query, SQL_FieldNameToNum(Query, "gameTime"))
+	
+	for(new i; i < sizeof(gUserSettings[]); i++)
+	{
+		gUserSettings[id][i] = lUserSettings[i]
+	}
 
 	new sqlText[256]
 	
 	formatex(sqlText, charsmax(sqlText), "UPDATE regSystemAccounts SET accountActiveCS1=^"%d^" WHERE accountId=^"%d^";", 1, gAccountId[id])
 	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
 	
-	ExecuteForward(gForwardClientProcessLogin, retValue, id)
+	ExecuteForward(gForwardClientProcessLogin, retValue, id, gAccountId[id])
 	
 	if(!retValue)
 	{
@@ -281,6 +307,7 @@ public sqlLoginHandle(FailState, Handle:Query, error[], errorcode, data[], datas
 		flag_unset(gAutoLogin, id)
 		flag_unset(gLoadingUser, id)
 		ExecuteForward(gForwardClientSuccessLogin, retValue, id)
+		saveAccountData(id)
 	}
 }
 
@@ -306,6 +333,7 @@ public checkSqlArray(taskId)
 		flag_unset(gAutoLogin, id)
 		flag_unset(gLoadingUser, id)
 		ExecuteForward(gForwardClientSuccessLogin, retValue, id)
+		saveAccountData(id)
 	}
 }
 
@@ -348,20 +376,43 @@ public saveAccountData(taskId)
 	
 	len += formatex(sqlText[len], charsmax(sqlText) - len, "UPDATE regSystemAccounts SET")
 	len += formatex(sqlText[len], charsmax(sqlText) - len, " gameTime = ^"%d^"", gGameTime[id]+get_user_time(id, 1))
+	len += formatex(sqlText[len], charsmax(sqlText) - len, ", settingAutoLogin = ^"%d^"", gUserSettings[id][MG_SETTING_AUTOLOGIN])
+	len += formatex(sqlText[len], charsmax(sqlText) - len, ", settingAutoLoginSteamId = ^"%d^"", gUserSettings[id][MG_SETTING_AUTOLOGINAUTHID])
+	len += formatex(sqlText[len], charsmax(sqlText) - len, ", settingAutoLoginName = ^"%d^"", gUserSettings[id][MG_SETTING_AUTOLOGINNAME])
+	len += formatex(sqlText[len], charsmax(sqlText) - len, ", settingAutoLoginSetinfoPw = ^"%d^"", gUserSettings[id][MG_SETTING_AUTOLOGINSETINFO])
 	
 	if(loggingOut)
 		len += formatex(sqlText[len], charsmax(sqlText) - len, ", lastSteamId = ^"%s^", lastName = ^"%s^", lastSetinfoPwHash = ^"%s^"", lSteamId, lName, lSetinfoPwHash)
 	
-	len += formatex(sqlText[len], charsmax(sqlText) - len, " WHERE gameId=^"%d^";", gAccountId[id])
+	len += formatex(sqlText[len], charsmax(sqlText) - len, " WHERE accountId=^"%d^";", gAccountId[id])
 	SQL_ThreadQuery(gSqlRegTuple, "sqlGeneralHandle", sqlText)
 	
 	if(loggingOut)
-		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_LOGOUT)
+		ExecuteForward(gForwardClientSqlSave, retValue, id, gAccountId[id], SQL_SAVETYPE_LOGOUT)
 	else
 	{
-		ExecuteForward(gForwardClientSqlSave, retValue, id, SQL_SAVETYPE_REGULAR)
+		ExecuteForward(gForwardClientSqlSave, retValue, id, gAccountId[id], SQL_SAVETYPE_REGULAR)
 		set_task(30.0, "sqlSaveData", TASKID1+id)
 	}
+}
+
+public native_reg_user_setting_get(plugin_id, param_num)
+{
+	new id = get_param(1)
+	new lType = get_param(2)
+
+	return gUserSettings[id][lType]
+}
+
+public native_reg_user_setting_set(plugin_id, param_num)
+{
+	new id = get_param(1)
+	new lType = get_param(2)
+	new lValue = get_param(3)
+
+	gUserSettings[id][lType] = lValue
+
+	return true
 }
 
 public native_reg_user_loading(plugin_id, param_num)
@@ -554,6 +605,11 @@ client_clean(id, bool:disconnect = false)
 	flag_unset(gAutoLogin, id)
 	gAccountId[id] = 0
 	gGameTime[id] = 0
+
+	for(new i; i < sizeof(gUserSettings[]); i++)
+	{
+		gUserSettings[id][i] = 0
+	}
 	
 	remove_task(TASKID1+id)
 	
@@ -629,6 +685,11 @@ userLogout(id)
 	flag_unset(gAutoLogin, id)
 	gAccountId[id] = 0
 	gGameTime[id] = 0
+
+	for(new i; i < sizeof(gUserSettings[]); i++)
+	{
+		gUserSettings[id][i] = 0
+	}
 	
 	ExecuteForward(gForwardClientClean, retValue, id)
 	ExecuteForward(gForwardClientLogout, retValue, id)
@@ -641,6 +702,7 @@ getSetinfoPwHash(id, string[], len)
 	hash_string(string, Hash_Md5, string, len)
 	return true
 }
+
 /* AMXX-Studio Notes - DO NOT MODIFY BELOW HERE
 *{\\ rtf1\\ ansi\\ deff0{\\ fonttbl{\\ f0\\ fnil Tahoma;}}\n\\ viewkind4\\ uc1\\ pard\\ lang1066\\ f0\\ fs16 \n\\ par }
 */

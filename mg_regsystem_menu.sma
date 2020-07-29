@@ -655,7 +655,7 @@ checkUserSetinfoPW(id)
 	if(!lSetinfoPW[0])
 	{
 		GenerateString(lSetinfoPW, 8)
-		client_cmd(id, "setinfo ^"_pw^" ^"%s^"", lSetinfoPW)
+		set_user_info(id, "_pw", lSetinfoPW)
 		client_print(id, print_chat, "trueee")
 	}
 	client_print(id, print_chat, "%s", lSetinfoPW)

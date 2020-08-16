@@ -66,6 +66,7 @@ public plugin_natives()
 	register_native("mg_reg_user_setting_get", "native_reg_user_setting_get")
 	register_native("mg_reg_user_setting_set", "native_reg_user_setting_set")
 
+	register_native("mg_reg_user_accountid_get", "native_reg_user_accountid_get")
 	register_native("mg_reg_user_loading", "native_reg_user_loading")
 	register_native("mg_reg_user_loggedin", "native_reg_user_loggedin")
 	register_native("mg_reg_user_register", "native_reg_user_register")
@@ -396,6 +397,16 @@ public saveAccountData(taskId)
 	}
 }
 
+public native_reg_user_accountid_get(plugin_id, param_num)
+{
+	new id = get_param(1)
+
+	if(!flag_get(gLoggedIn, id) || flag_get(gLoadingUser, id))
+		return 0
+
+	return gAccountId[id]
+}
+
 public native_reg_user_setting_get(plugin_id, param_num)
 {
 	new id = get_param(1)
@@ -565,7 +576,10 @@ public native_reg_user_sqlload_finished(plugin_id, param_num)
 		return false
 	}
 	
-	ArrayDeleteItem(arrayUserLoadingSql[id], lSqlId)
+	new lArrayId = ArrayFindValue(arrayUserLoadingSql[id], lSqlId)
+
+	if(lArrayId != -1)
+		ArrayDeleteItem(arrayUserLoadingSql[id], lArrayId)
 	
 	remove_task(TASKID2+id)
 	set_task(0.5, "checkSqlArray", TASKID2+id)
